@@ -448,6 +448,7 @@ async function revisarWhatsapp() {
     let info = textos[w.estado] || w.estado;
     if (w.grupoNombre) info += ` · Grupo: ${w.grupoNombre}`;
     if (w.enCola) info += ` · ${w.enCola} mensaje${w.enCola === 1 ? '' : 's'} en espera`;
+    if (w.error && w.estado !== 'conectado') info += ` · Error: ${w.error}`;
     $('wsp-estado').textContent = info;
 
     $('wsp-qr').hidden = !(w.estado === 'qr' && w.qr);

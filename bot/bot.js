@@ -2,6 +2,7 @@
 // Le pide al dashboard (Vercel) los mensajes pendientes y los manda al grupo.
 // Arranque: doble clic en INICIAR-BOT.bat  (o: npm run bot)
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { Client, LocalAuth } = require('whatsapp-web.js');
@@ -29,6 +30,7 @@ if (!DASHBOARD || !BOT_KEY) {
   process.exit(1);
 }
 
+let ultimoError = null;
 let estado = 'iniciando';
 let qrImagen = null;
 let numero = null;
@@ -47,14 +49,35 @@ async function llamar(ruta, cuerpo) {
   return json;
 }
 
+// Usa el Chrome (o Edge) que ya tienes instalado, si existe
+function buscarNavegador() {
+  const candidatos = [
+    process.env.CHROME_PATH,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+  ].filter(Boolean);
+  return candidatos.find(p => {
+    try { return fs.existsSync(p); } catch { return false; }
+  });
+}
+const navegador = buscarNavegador();
+if (navegador) console.log(`🌐 Usando navegador: ${navegador}`);
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, '.sesion') }),
-  puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+  puppeteer: {
+    headless: true,
+    executablePath: navegador || undefined,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  }
 });
 
 async function publicarEstado() {
   try {
-    await llamar('estado', { estado, qr: qrImagen, numero, grupos });
+    await llamar('estado', { estado, qr: qrImagen, numero, grupos, error: ultimoError });
   } catch (e) {
     console.error('No se pudo avisar al dashboard:', e.message);
   }
@@ -82,6 +105,7 @@ client.on('qr', async qr => {
 
 client.on('ready', async () => {
   estado = 'conectado';
+  ultimoError = null;
   qrImagen = null;
   numero = client.info && client.info.wid ? client.info.wid.user : null;
   console.log(`✅ WhatsApp conectado (+${numero})`);
@@ -90,14 +114,16 @@ client.on('ready', async () => {
   procesarCola();
 });
 
-client.on('auth_failure', () => {
+client.on('auth_failure', m => {
   estado = 'desconectado';
+  ultimoError = `Falló la autenticación: ${m || ''}`;
   console.log('⚠️ Falló la autenticación. Borra la carpeta bot/.sesion y vuelve a abrir el bot.');
   publicarEstado();
 });
 
-client.on('disconnected', () => {
+client.on('disconnected', motivo => {
   estado = 'desconectado';
+  ultimoError = `WhatsApp se desconectó: ${motivo || ''}`;
   console.log('⚠️ WhatsApp desconectado. Reintentando en 5 s…');
   publicarEstado();
   setTimeout(() => client.initialize().catch(() => {}), 5000);
@@ -155,6 +181,7 @@ console.log(`🔗 Conectando con el dashboard: ${DASHBOARD}`);
 publicarEstado();
 client.initialize().catch(e => {
   estado = 'desconectado';
+  ultimoError = `No se pudo iniciar WhatsApp: ${e.message}`;
   console.error('No se pudo iniciar WhatsApp:', e.message);
   publicarEstado();
 });

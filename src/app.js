@@ -56,8 +56,8 @@ botApi.use((req, res, next) => {
 
 // El bot avisa que está vivo, su estado, el QR y sus grupos
 botApi.post('/estado', r(async (req, res) => {
-  const { estado, qr, numero, grupos } = req.body || {};
-  await store.setBot({ estado, qr: qr || null, numero: numero || null, grupos: grupos || [], actualizado: Date.now() });
+  const { estado, qr, numero, grupos, error } = req.body || {};
+  await store.setBot({ estado, qr: qr || null, numero: numero || null, grupos: grupos || [], error: error ? String(error).slice(0, 500) : null, actualizado: Date.now() });
   res.json({ ok: true });
 }));
 
@@ -254,6 +254,7 @@ api.get('/whatsapp', r(async (req, res) => {
     estado: vivo ? b.estado : 'apagado',
     qr: vivo ? b.qr : null,
     numero: vivo ? b.numero : null,
+    error: vivo ? b.error || null : null,
     grupos: vivo ? b.grupos || [] : [],
     enCola: await store.largoCola(),
     grupoId: d.grupoId,
