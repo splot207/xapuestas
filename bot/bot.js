@@ -1,6 +1,7 @@
 // Bot de WhatsApp (corre en tu PC con el número secundario).
-// Le pide al dashboard (Vercel) los mensajes pendientes y los manda al grupo.
-// Arranque: doble clic en INICIAR-BOT.bat  (o: npm run bot)
+// Atiende uno o varios dashboards (ej: JIJA$ y JIJAZOS): a cada uno le pide
+// sus mensajes pendientes y los manda a su propio grupo.
+// Arranque: doble clic en INICIAR-BOT.bat  (o: node bot/bot.js)
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
@@ -11,38 +12,48 @@ const qrTerminal = require('qrcode-terminal');
 const cron = require('node-cron');
 const config = require('../config.json');
 
-// Configuración: bot/conexion.json (o variables DASHBOARD_URL / BOT_KEY en .env)
+// ---------- Dashboards a atender (bot/conexion.json) ----------
+// Formato nuevo: { "dashboards": [ { "nombre": "JIJA$", "dashboardUrl": "...", "botKey": "..." }, ... ] }
+// Formato viejo: { "dashboardUrl": "...", "botKey": "..." }
 let conexion = {};
 try {
   conexion = require('./conexion.json');
 } catch {
-  /* sin archivo: se usan las variables de entorno */
+  /* sin archivo */
 }
-const DASHBOARD = (process.env.DASHBOARD_URL || conexion.dashboardUrl || '').replace(/\/+$/, '');
-const BOT_KEY = process.env.BOT_KEY || conexion.botKey || '';
+const lista = Array.isArray(conexion.dashboards)
+  ? conexion.dashboards
+  : [{ nombre: 'Dashboard', dashboardUrl: process.env.DASHBOARD_URL || conexion.dashboardUrl, botKey: process.env.BOT_KEY || conexion.botKey }];
 
-const CADA_COLA_MS = 10000;   // revisa si hay mensajes nuevos cada 10 s
-const CADA_LATIDO_MS = 60000; // avisa al dashboard que sigue vivo cada 60 s
-const PAUSA_ENTRE_MSJ = 1500; // pausa entre mensajes para no parecer spam
+const paneles = lista
+  .filter(p => p && p.dashboardUrl && p.botKey)
+  .map(p => ({
+    nombre: p.nombre || p.dashboardUrl,
+    url: String(p.dashboardUrl).replace(/\/+$/, ''),
+    key: p.botKey,
+    avisoSinGrupo: false
+  }));
 
-if (!DASHBOARD || !BOT_KEY) {
-  console.log('⚠️ Falta bot/conexion.json (dashboardUrl y botKey).');
+if (!paneles.length) {
+  console.log('⚠️ Falta bot/conexion.json con la dirección del dashboard y la llave del bot.');
   process.exit(1);
 }
 
-let ultimoError = null;
+const CADA_COLA_MS = 10000;   // revisa si hay mensajes nuevos cada 10 s
+const CADA_LATIDO_MS = 60000; // avisa a los dashboards que sigue vivo cada 60 s
+const PAUSA_ENTRE_MSJ = 1500; // pausa entre mensajes para no parecer spam
+
 let estado = 'iniciando';
 let qrImagen = null;
 let numero = null;
-let grupos = [];
-let avisoGrupos = false;
+let ultimoError = null;
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
-async function llamar(ruta, cuerpo) {
-  const res = await fetch(`${DASHBOARD}/api/bot/${ruta}`, {
+async function llamar(panel, ruta, cuerpo) {
+  const res = await fetch(`${panel.url}/api/bot/${ruta}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-bot-key': BOT_KEY },
+    headers: { 'Content-Type': 'application/json', 'x-bot-key': panel.key },
     body: JSON.stringify(cuerpo || {})
   });
   const json = await res.json().catch(() => ({}));
@@ -50,6 +61,7 @@ async function llamar(ruta, cuerpo) {
   return json;
 }
 
+// ---------- Navegador ----------
 // Usa el Chrome (o Edge) que ya tienes instalado, si existe
 function buscarNavegador() {
   const candidatos = [
@@ -77,24 +89,11 @@ const client = new Client({
 });
 
 async function publicarEstado() {
-  try {
-    await llamar('estado', { estado, qr: qrImagen, numero, grupos, error: ultimoError });
-  } catch (e) {
-    console.error('No se pudo avisar al dashboard:', e.message);
-  }
-}
-
-async function cargarGrupos() {
-  try {
-    const chats = await client.getChats();
-    grupos = chats
-      .filter(c => c.isGroup)
-      .map(c => ({ id: c.id._serialized, nombre: c.name }))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  } catch (e) {
-    if (!avisoGrupos) {
-      console.log('ℹ️ WhatsApp no deja leer la lista de grupos. Escribe !aqui dentro de tu grupo para elegirlo.');
-      avisoGrupos = true;
+  for (const panel of paneles) {
+    try {
+      await llamar(panel, 'estado', { estado, qr: qrImagen, numero, grupos: [], error: ultimoError });
+    } catch (e) {
+      console.error(`No se pudo avisar a ${panel.nombre}:`, e.message);
     }
   }
 }
@@ -113,44 +112,9 @@ client.on('ready', async () => {
   qrImagen = null;
   numero = client.info && client.info.wid ? client.info.wid.user : null;
   console.log(`✅ WhatsApp conectado (+${numero})`);
-  await cargarGrupos();
-  console.log(grupos.length ? `👥 Grupos encontrados: ${grupos.length}` : '👥 Buscando grupos… (puede tardar un poco mientras WhatsApp sincroniza)');
+  console.log(`📋 Atendiendo: ${paneles.map(p => p.nombre).join(', ')}`);
   publicarEstado();
-  procesarCola();
-});
-
-// Escribe !aqui en tu grupo (desde cualquier número) y ese grupo queda elegido.
-// No usa getChat()/getChats() porque fallan con algunas versiones de WhatsApp Web.
-const normalizar = t => (t || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^[¡!]+/, '!');
-
-client.on('message_create', async m => {
-  try {
-    const grupoId = m.fromMe ? m.to : m.from;
-    const esGrupo = typeof grupoId === 'string' && grupoId.endsWith('@g.us');
-    if (esGrupo) console.log(`📩 Mensaje en un grupo: "${(m.body || '').slice(0, 40)}"`);
-    if (!esGrupo || normalizar(m.body) !== '!aqui') return;
-
-    let nombre = 'Grupo de apuestas';
-    try {
-      const chat = await m.getChat();
-      if (chat && chat.name) nombre = chat.name;
-    } catch {
-      /* si falla, se usa el nombre por defecto */
-    }
-    const g = { id: grupoId, nombre };
-    await llamar('grupo', g);
-    if (!grupos.some(x => x.id === g.id)) grupos.push(g);
-    publicarEstado();
-    console.log(`✅ Grupo elegido: ${g.nombre} (${g.id})`);
-    try {
-      await client.sendMessage(g.id, '✅ Listo, desde ahora las apuestas se mandan a este grupo.');
-    } catch (e) {
-      console.error('No se pudo responder en el grupo:', e.message);
-    }
-    procesarCola();
-  } catch (e) {
-    console.error('No se pudo guardar el grupo:', e.message);
-  }
+  procesarColas();
 });
 
 client.on('auth_failure', m => {
@@ -168,14 +132,11 @@ client.on('disconnected', motivo => {
   setTimeout(() => client.initialize().catch(() => {}), 5000);
 });
 
-// Convierte el link de invitación que pegaste en el dashboard en el grupo de destino
-let resolviendoLink = false;
-async function usarLink(codigo) {
-  if (resolviendoLink) return;
-  resolviendoLink = true;
-  console.log('🔗 Revisando el link del grupo…');
+// ---------- Elegir grupo con el link de invitación ----------
+async function usarLink(panel, codigo) {
+  console.log(`🔗 [${panel.nombre}] Revisando el link del grupo…`);
   let id = null;
-  let nombre = 'Grupo de apuestas';
+  let nombre = 'Grupo';
   const errores = [];
   try {
     const info = await client.getInviteInfo(codigo);
@@ -192,88 +153,82 @@ async function usarLink(codigo) {
       errores.push(e.message);
     }
   }
-  try {
-    if (id && String(id).endsWith('@g.us')) {
-      await llamar('grupo', { id: String(id), nombre });
-      console.log(`✅ Grupo elegido: ${nombre} (${id})`);
-      try {
-        await client.sendMessage(String(id), '✅ Listo, desde ahora las apuestas se mandan a este grupo.');
-      } catch (e) {
-        console.error('No se pudo responder en el grupo:', e.message);
-      }
-    } else {
-      const err = `WhatsApp no aceptó el link (${errores.join(' / ') || 'sin detalle'})`;
-      console.error('⚠️ ' + err);
-      await llamar('grupo-error', { error: err });
+  if (id && String(id).endsWith('@g.us')) {
+    await llamar(panel, 'grupo', { id: String(id), nombre });
+    console.log(`✅ [${panel.nombre}] Grupo elegido: ${nombre}`);
+    try {
+      await client.sendMessage(String(id), `✅ Listo, desde ahora los mensajes de ${panel.nombre} se mandan a este grupo.`);
+    } catch (e) {
+      console.error('No se pudo responder en el grupo:', e.message);
     }
-  } finally {
-    resolviendoLink = false;
+  } else {
+    const err = `WhatsApp no aceptó el link (${errores.join(' / ') || 'sin detalle'})`;
+    console.error(`⚠️ [${panel.nombre}] ${err}`);
+    await llamar(panel, 'grupo-error', { error: err });
   }
 }
 
-// Manda todo lo que haya en la cola
+// ---------- Mandar las colas de cada dashboard ----------
+async function procesarCola(panel) {
+  for (;;) {
+    const r = await llamar(panel, 'siguiente');
+    if (r.linkPendiente) {
+      await usarLink(panel, r.linkPendiente);
+      continue;
+    }
+    if (r.sinGrupo && !panel.avisoSinGrupo) {
+      console.log(`ℹ️ [${panel.nombre}] Hay mensajes esperando: pega el link del grupo en su dashboard (panel WhatsApp).`);
+      panel.avisoSinGrupo = true;
+    }
+    if (!r.item) break;
+    panel.avisoSinGrupo = false;
+    try {
+      await client.sendMessage(r.grupoId, r.item.texto);
+      console.log(`📤 [${panel.nombre}] Enviado: ${r.item.texto.split('\n')[0]}`);
+      await esperar(PAUSA_ENTRE_MSJ);
+    } catch (e) {
+      console.error(`[${panel.nombre}] No se pudo enviar, se reintenta luego:`, e.message);
+      await llamar(panel, 'devolver', { item: r.item }).catch(() => {});
+      break;
+    }
+  }
+}
+
 let procesando = false;
-let avisoSinGrupo = false;
-async function procesarCola() {
+async function procesarColas() {
   if (procesando || estado !== 'conectado') return;
   procesando = true;
   try {
-    for (;;) {
-      const r = await llamar('siguiente');
-      if (r.linkPendiente) {
-        await usarLink(r.linkPendiente);
-        continue;
-      }
-      if (r.sinGrupo && !avisoSinGrupo) {
-        console.log('ℹ️ Hay mensajes esperando: pega el link de invitación del grupo en el dashboard (panel WhatsApp).');
-        avisoSinGrupo = true;
-      }
-      if (!r.item) break;
-      avisoSinGrupo = false;
+    for (const panel of paneles) {
       try {
-        await client.sendMessage(r.grupoId, r.item.texto);
-        console.log(`📤 Enviado: ${r.item.texto.split('\n')[0]}`);
-        await esperar(PAUSA_ENTRE_MSJ);
+        await procesarCola(panel);
       } catch (e) {
-        console.error('No se pudo enviar, se reintenta luego:', e.message);
-        await llamar('devolver', { item: r.item }).catch(() => {});
-        break;
+        console.error(`Error hablando con ${panel.nombre}:`, e.message);
       }
     }
-  } catch (e) {
-    console.error('Error hablando con el dashboard:', e.message);
   } finally {
     procesando = false;
   }
 }
 
-// Resumen automático todas las noches
+// ---------- Resumen automático todas las noches ----------
 const [hh, mm] = config.horaResumen.split(':').map(Number);
 cron.schedule(`${mm} ${hh} * * *`, async () => {
-  try {
-    await llamar('resumen');
-    console.log('🌙 Resumen nocturno en cola');
-    procesarCola();
-  } catch (e) {
-    console.error('Error en el resumen nocturno:', e.message);
-  }
-}, { timezone: config.zonaHoraria });
-
-setInterval(procesarCola, CADA_COLA_MS);
-setInterval(publicarEstado, CADA_LATIDO_MS);
-// Los grupos se recargan cada 5 min; si todavía no aparece ninguno (WhatsApp sigue sincronizando), cada 20 s
-setInterval(() => estado === 'conectado' && cargarGrupos(), 5 * 60 * 1000);
-setInterval(async () => {
-  if (estado === 'conectado' && grupos.length === 0) {
-    await cargarGrupos();
-    if (grupos.length) {
-      console.log(`👥 Grupos encontrados: ${grupos.length}`);
-      publicarEstado();
+  for (const panel of paneles) {
+    try {
+      await llamar(panel, 'resumen');
+      console.log(`🌙 [${panel.nombre}] Resumen nocturno en cola`);
+    } catch (e) {
+      console.error(`[${panel.nombre}] Error en el resumen nocturno:`, e.message);
     }
   }
-}, 20000);
+  procesarColas();
+}, { timezone: config.zonaHoraria });
 
-console.log(`🔗 Conectando con el dashboard: ${DASHBOARD}`);
+setInterval(procesarColas, CADA_COLA_MS);
+setInterval(publicarEstado, CADA_LATIDO_MS);
+
+console.log(`🔗 Dashboards: ${paneles.map(p => `${p.nombre} (${p.url})`).join(' · ')}`);
 publicarEstado();
 client.initialize().catch(e => {
   estado = 'desconectado';
