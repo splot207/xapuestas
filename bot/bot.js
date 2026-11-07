@@ -110,6 +110,7 @@ client.on('ready', async () => {
   numero = client.info && client.info.wid ? client.info.wid.user : null;
   console.log(`✅ WhatsApp conectado (+${numero})`);
   await cargarGrupos();
+  console.log(grupos.length ? `👥 Grupos encontrados: ${grupos.length}` : '👥 Buscando grupos… (puede tardar un poco mientras WhatsApp sincroniza)');
   publicarEstado();
   procesarCola();
 });
@@ -175,7 +176,17 @@ cron.schedule(`${mm} ${hh} * * *`, async () => {
 
 setInterval(procesarCola, CADA_COLA_MS);
 setInterval(publicarEstado, CADA_LATIDO_MS);
+// Los grupos se recargan cada 5 min; si todavía no aparece ninguno (WhatsApp sigue sincronizando), cada 20 s
 setInterval(() => estado === 'conectado' && cargarGrupos(), 5 * 60 * 1000);
+setInterval(async () => {
+  if (estado === 'conectado' && grupos.length === 0) {
+    await cargarGrupos();
+    if (grupos.length) {
+      console.log(`👥 Grupos encontrados: ${grupos.length}`);
+      publicarEstado();
+    }
+  }
+}, 20000);
 
 console.log(`🔗 Conectando con el dashboard: ${DASHBOARD}`);
 publicarEstado();
