@@ -73,6 +73,17 @@ botApi.post('/siguiente', r(async (req, res) => {
   res.json({ item, grupoId: d.grupoId });
 }));
 
+// El bot avisa que alguien escribió !aqui en un grupo: ese es el grupo de los mensajes
+botApi.post('/grupo', r(async (req, res) => {
+  const { id, nombre } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'Falta el grupo' });
+  const d = await store.getDatos();
+  d.grupoId = id;
+  d.grupoNombre = nombre || 'Grupo';
+  await store.setDatos(d);
+  res.json({ ok: true });
+}));
+
 // Si no pudo enviarlo, lo devuelve a la cola
 botApi.post('/devolver', r(async (req, res) => {
   if (req.body && req.body.item) await store.devolverACola(req.body.item);

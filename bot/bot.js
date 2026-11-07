@@ -115,6 +115,24 @@ client.on('ready', async () => {
   procesarCola();
 });
 
+// Escribe !aqui en tu grupo (desde cualquier número) y ese grupo queda elegido
+client.on('message_create', async m => {
+  try {
+    if ((m.body || '').trim().toLowerCase() !== '!aqui') return;
+    const chat = await m.getChat();
+    if (!chat.isGroup) return;
+    const g = { id: chat.id._serialized, nombre: chat.name };
+    await llamar('grupo', g);
+    if (!grupos.some(x => x.id === g.id)) grupos.push(g);
+    publicarEstado();
+    console.log(`✅ Grupo elegido: ${g.nombre}`);
+    await chat.sendMessage('✅ Listo, desde ahora las apuestas se mandan a este grupo.');
+    procesarCola();
+  } catch (e) {
+    console.error('No se pudo guardar el grupo:', e.message);
+  }
+});
+
 client.on('auth_failure', m => {
   estado = 'desconectado';
   ultimoError = `Falló la autenticación: ${m || ''}`;
