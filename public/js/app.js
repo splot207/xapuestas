@@ -38,8 +38,8 @@ async function api(url, opciones = {}) {
 }
 
 function avisoEnvio(r, textoOk) {
-  if (r.enviado) toast(`${textoOk} · enviado al grupo ✅`);
-  else if (r.aviso) toast(`${textoOk} · ${r.aviso}`, 'alerta');
+  if (r.aviso) toast(`${textoOk} · ${r.aviso}`, 'alerta');
+  else if (r.encolados) toast(`${textoOk} · enviando al grupo 📤`);
   else toast(textoOk);
 }
 
@@ -268,6 +268,7 @@ $('btn-agregar').addEventListener('click', () => {
 let workerPromesa = null;
 function obtenerWorker() {
   if (!workerPromesa) {
+    // El lector de tickets viene incluido en /vendor (no depende de otros sitios)
     workerPromesa = Tesseract.createWorker('spa', 1, {
       workerPath: '/vendor/tesseract/worker.min.js',
       corePath: '/vendor/tesseract-core',
@@ -360,10 +361,7 @@ $('btn-guardar-lote').addEventListener('click', async () => {
     lote.forEach(f => f.imagen && URL.revokeObjectURL(f.imagen));
     lote = [];
     render();
-    let t = `${r.guardadas} apuesta${r.guardadas === 1 ? '' : 's'} guardada${r.guardadas === 1 ? '' : 's'}`;
-    if ($('f-enviar').checked) t += ` · ${r.enviadas} enviada${r.enviadas === 1 ? '' : 's'} al grupo`;
-    if (r.aviso) toast(`${t} · ${r.aviso}`, 'alerta');
-    else toast(t);
+    avisoEnvio(r, `${r.guardadas} apuesta${r.guardadas === 1 ? '' : 's'} guardada${r.guardadas === 1 ? '' : 's'}`);
   } catch (err) {
     toast(err.message, 'error');
     renderLote();
@@ -429,36 +427,42 @@ $('btn-guardar-capital').addEventListener('click', async () => {
   }
 });
 
-// ---------- WhatsApp ----------
-let gruposCargados = false;
+// ---------- WhatsApp (estado que reporta el bot de tu PC) ----------
+let gruposFirma = '';
 
 async function revisarWhatsapp() {
+  if (document.hidden) return;
   try {
     const w = await api('/api/whatsapp');
-    const chip = $('wsp-chip');
     const textos = {
       conectado: `Conectado${w.numero ? ' · +' + w.numero : ''}`,
-      qr: 'Esperando escaneo del QR',
-      iniciando: 'Iniciando WhatsApp…',
-      desconectado: 'Desconectado',
-      desactivado: 'Bot desactivado (modo prueba)'
+      qr: 'Esperando que escanees el QR',
+      iniciando: 'El bot está iniciando…',
+      desconectado: 'WhatsApp desconectado',
+      apagado: 'Bot apagado: abre tu PC y corre "npm run bot"'
     };
-    chip.textContent = `WhatsApp: ${w.estado === 'conectado' ? 'conectado' : textos[w.estado]}`;
-    chip.className = `chip chip-${w.estado}`;
+    const chip = $('wsp-chip');
+    chip.textContent = `WhatsApp: ${w.estado === 'conectado' ? 'conectado' : w.estado === 'apagado' ? 'bot apagado' : textos[w.estado]}`;
+    chip.className = `chip chip-${w.estado === 'apagado' ? 'desconectado' : w.estado}`;
 
-    $('wsp-estado').textContent = textos[w.estado] + (w.grupoNombre ? ` · Grupo: ${w.grupoNombre}` : '');
+    let info = textos[w.estado] || w.estado;
+    if (w.grupoNombre) info += ` · Grupo: ${w.grupoNombre}`;
+    if (w.enCola) info += ` · ${w.enCola} mensaje${w.enCola === 1 ? '' : 's'} en espera`;
+    $('wsp-estado').textContent = info;
+
     $('wsp-qr').hidden = !(w.estado === 'qr' && w.qr);
     if (w.qr) $('wsp-qr-img').src = w.qr;
 
-    $('wsp-grupo').hidden = w.estado !== 'conectado';
-    if (w.estado === 'conectado' && !gruposCargados) {
-      gruposCargados = true;
-      const grupos = await api('/api/whatsapp/grupos');
+    $('wsp-grupo').hidden = !(w.grupos.length || w.grupoId);
+    const firma = JSON.stringify([w.grupos, w.grupoId]);
+    if (firma !== gruposFirma && document.activeElement !== $('sel-grupo')) {
+      gruposFirma = firma;
+      const lista = w.grupos.slice();
+      if (w.grupoId && !lista.some(g => g.id === w.grupoId)) lista.unshift({ id: w.grupoId, nombre: w.grupoNombre || 'Grupo guardado' });
       $('sel-grupo').innerHTML =
         '<option value="">— Elige un grupo —</option>' +
-        grupos.map(g => `<option value="${esc(g.id)}" ${g.id === w.grupoId ? 'selected' : ''}>${esc(g.nombre)}</option>`).join('');
+        lista.map(g => `<option value="${esc(g.id)}" ${g.id === w.grupoId ? 'selected' : ''}>${esc(g.nombre)}</option>`).join('');
     }
-    if (w.estado !== 'conectado') gruposCargados = false;
   } catch {
     /* silencioso */
   }
@@ -500,5 +504,6 @@ $('btn-salir').addEventListener('click', async () => {
     toast(err.message, 'error');
   }
   revisarWhatsapp();
-  setInterval(revisarWhatsapp, 4000);
+  setInterval(revisarWhatsapp, 8000);
+  document.addEventListener('visibilitychange', revisarWhatsapp);
 })();

@@ -3,3 +3,5 @@ data/
 .sesion/
 .wwebjs_cache/
 .env
+bot/node_modules/
+.vercel

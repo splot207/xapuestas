@@ -22,3 +22,9 @@ form.addEventListener('submit', async e => {
     error.hidden = false;
   }
 });
+
+// Si ya hay sesión abierta, entrar directo
+fetch('/api/sesion')
+  .then(r => r.json())
+  .then(s => { if (s.activa) window.location.href = '/'; })
+  .catch(() => {});

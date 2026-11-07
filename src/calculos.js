@@ -1,7 +1,4 @@
-const fs = require('fs');
-const path = require('path');
-
-const ARCHIVO = path.join(__dirname, 'data', 'db.json');
+// Cálculos de apuestas (monto, ganancia, % y resumen)
 
 const POR_DEFECTO = {
   capitalInicial: 2000,
@@ -13,20 +10,6 @@ const POR_DEFECTO = {
   apuestas: []
 };
 
-function cargar() {
-  try {
-    return { ...POR_DEFECTO, ...JSON.parse(fs.readFileSync(ARCHIVO, 'utf8')) };
-  } catch {
-    return { ...POR_DEFECTO, apuestas: [] };
-  }
-}
-
-function guardar(datos) {
-  fs.mkdirSync(path.dirname(ARCHIVO), { recursive: true });
-  fs.writeFileSync(ARCHIVO, JSON.stringify(datos, null, 2));
-}
-
-// Monto, ganancia en plata y % sobre el capital inicial
 function calcular(a, capital) {
   const monto = (capital * a.stake) / 100;
   let ganancia = 0;
@@ -66,4 +49,4 @@ function fechaLocal(fecha, zona) {
   return new Date(fecha).toLocaleDateString('en-CA', { timeZone: zona });
 }
 
-module.exports = { cargar, guardar, calcular, resumen, fechaLocal };
+module.exports = { POR_DEFECTO, calcular, resumen, fechaLocal };

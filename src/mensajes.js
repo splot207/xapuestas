@@ -1,4 +1,4 @@
-const { calcular, resumen } = require('./db');
+const { calcular, resumen } = require('./calculos');
 
 function plata(moneda, v, conSigno = false) {
   const n = Math.abs(v).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -41,7 +41,7 @@ function apuesta(a, datos) {
 
 // Resumen del día (para la noche o para el botón del dashboard)
 function resumenDia(datos, fecha, zona) {
-  const { fechaLocal } = require('./db');
+  const { fechaLocal } = require('./calculos');
   const delDia = datos.apuestas.filter(a => a.resueltaEn && fechaLocal(a.resueltaEn, zona) === fecha);
   const dia = resumen(delDia, datos.capitalInicial);
   const total = resumen(datos.apuestas, datos.capitalInicial);
