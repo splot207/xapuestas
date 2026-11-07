@@ -6,8 +6,22 @@ const fs = require('fs');
 const path = require('path');
 const { POR_DEFECTO } = require('./calculos');
 
-const URL_REDIS = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const TOKEN_REDIS = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+// Limpia valores pegados con comillas, espacios o con la línea completa
+// (ej: UPSTASH_REDIS_REST_TOKEN="AXXX..." en vez de solo AXXX...)
+function limpiar(valor, nombre) {
+  if (!valor) return valor;
+  let v = String(valor).trim();
+  const i = v.indexOf(`${nombre}=`);
+  if (i >= 0) v = v.slice(i + nombre.length + 1).split(/\r?\n/)[0];
+  return v.trim().replace(/^["']+|["']+$/g, '').trim();
+}
+
+const URL_REDIS =
+  limpiar(process.env.KV_REST_API_URL, 'KV_REST_API_URL') ||
+  limpiar(process.env.UPSTASH_REDIS_REST_URL, 'UPSTASH_REDIS_REST_URL');
+const TOKEN_REDIS =
+  limpiar(process.env.KV_REST_API_TOKEN, 'KV_REST_API_TOKEN') ||
+  limpiar(process.env.UPSTASH_REDIS_REST_TOKEN, 'UPSTASH_REDIS_REST_TOKEN');
 
 let redis = null;
 if (URL_REDIS && TOKEN_REDIS) {
