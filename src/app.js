@@ -10,7 +10,7 @@ const msj = require('./mensajes');
 const USUARIO = process.env.ADMIN_USER || config.usuario;
 const CONTRASENA = process.env.ADMIN_PASS || config.contrasena;
 const SECRETO = process.env.SESSION_SECRET || config.sessionSecret;
-const BOT_VIVO_MS = 60 * 1000; // si el bot no reporta en 60 s, se considera apagado
+const BOT_VIVO_MS = 150 * 1000; // si el bot no reporta en 150 s, se considera apagado
 
 const app = express();
 app.set('trust proxy', 1);

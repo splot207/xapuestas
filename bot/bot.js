@@ -14,8 +14,8 @@ const store = require('../src/store');
 const msj = require('../src/mensajes');
 const { fechaLocal } = require('../src/calculos');
 
-const CADA_COLA_MS = 8000;      // revisa si hay mensajes nuevos cada 8 s
-const CADA_LATIDO_MS = 25000;   // avisa al dashboard que sigue vivo cada 25 s
+const CADA_COLA_MS = 10000;     // revisa si hay mensajes nuevos cada 10 s
+const CADA_LATIDO_MS = 60000;   // avisa al dashboard que sigue vivo cada 60 s
 const PAUSA_ENTRE_MSJ = 1500;   // pausa entre mensajes para no parecer spam
 
 let estado = 'iniciando';
@@ -86,10 +86,15 @@ async function procesarCola() {
   if (procesando || estado !== 'conectado') return;
   procesando = true;
   try {
+    // 1 sola consulta cuando no hay nada (para no gastar el plan gratis)
+    let item = await store.sacarDeCola();
+    if (!item) return;
     const d = await store.getDatos();
-    if (!d.grupoId) return;
-    let item;
-    while ((item = await store.sacarDeCola())) {
+    if (!d.grupoId) {
+      await store.devolverACola(item);
+      return;
+    }
+    for (; item; item = await store.sacarDeCola()) {
       try {
         await client.sendMessage(d.grupoId, item.texto);
         console.log(`📤 Enviado: ${item.texto.split('\n')[0]}`);

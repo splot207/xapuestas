@@ -504,6 +504,6 @@ $('btn-salir').addEventListener('click', async () => {
     toast(err.message, 'error');
   }
   revisarWhatsapp();
-  setInterval(revisarWhatsapp, 8000);
+  setInterval(revisarWhatsapp, 10000);
   document.addEventListener('visibilitychange', revisarWhatsapp);
 })();
