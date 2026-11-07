@@ -1,0 +1,19 @@
+{
+  "name": "jijas-dashboard",
+  "version": "2.0.0",
+  "description": "Dashboard de apuestas + bot de WhatsApp para el grupo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@tesseract.js-data/spa": "^1.0.0",
+    "tesseract.js": "^5.1.1",
+    "express": "^4.21.1",
+    "express-session": "^1.18.1",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}

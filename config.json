@@ -1,0 +1,8 @@
+{
+  "usuario": "admin",
+  "contrasena": "admin",
+  "puerto": 3000,
+  "sessionSecret": "cambia-esto-por-una-frase-larga",
+  "horaResumen": "22:00",
+  "zonaHoraria": "America/Bogota"
+}

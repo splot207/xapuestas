@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JIJA$ Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">
+      <span class="marca-logo">JIJA$</span>
+      <span class="marca-sub">Dashboard de apuestas</span>
+    </div>
+    <div class="barra-der">
+      <span id="wsp-chip" class="chip">WhatsApp…</span>
+      <button id="btn-salir" class="btn btn-fantasma">Salir</button>
+    </div>
+  </header>
+
+  <main class="contenedor">
+
+    <!-- RESUMEN -->
+    <section class="stats">
+      <article class="stat stat-capital">
+        <span class="stat-label">Capital inicial</span>
+        <div class="capital-editar">
+          <input type="text" id="moneda" class="input-moneda" maxlength="5">
+          <input type="number" id="capital-inicial" step="0.01" min="1">
+          <button id="btn-guardar-capital" class="btn btn-mini">Guardar</button>
+        </div>
+      </article>
+      <article class="stat">
+        <span class="stat-label">Capital actual</span>
+        <strong id="stat-capital-actual" class="stat-valor">—</strong>
+      </article>
+      <article class="stat">
+        <span class="stat-label">Ganancia total</span>
+        <strong id="stat-ganancia" class="stat-valor">—</strong>
+        <span id="stat-porcentaje" class="stat-extra">—</span>
+      </article>
+      <article class="stat">
+        <span class="stat-label">Récord</span>
+        <strong id="stat-record" class="stat-valor">—</strong>
+        <span id="stat-acierto" class="stat-extra">—</span>
+      </article>
+      <article class="stat">
+        <span class="stat-label">Yield</span>
+        <strong id="stat-yield" class="stat-valor">—</strong>
+        <span id="stat-en-juego" class="stat-extra">—</span>
+      </article>
+    </section>
+
+    <div class="rejilla">
+      <!-- NUEVA APUESTA -->
+      <section class="panel">
+        <div class="panel-cabecera">
+          <h2>Nuevas apuestas</h2>
+          <span id="lote-contador" class="chip">0 apuestas</span>
+        </div>
+
+        <label id="zona-tickets" class="zona-tickets">
+          <input type="file" id="input-tickets" accept="image/*" multiple hidden>
+          <span class="zona-icono">📸</span>
+          <strong>Sube las fotos de tus tickets</strong>
+          <span>Toca aquí, arrastra las imágenes o pégalas con Ctrl+V.<br>Se llenan solas y luego puedes corregir lo que quieras.</span>
+        </label>
+
+        <div id="lote" class="lote"></div>
+
+        <button type="button" id="btn-agregar" class="btn btn-fantasma btn-grande btn-agregar">+ Agregar apuesta a mano</button>
+
+        <div class="lote-pie">
+          <label class="check">
+            <input type="checkbox" id="f-enviar" checked>
+            Enviar al grupo de WhatsApp
+          </label>
+          <button type="button" id="btn-guardar-lote" class="btn btn-primario btn-grande" disabled>Guardar apuestas</button>
+        </div>
+      </section>
+
+      <!-- WHATSAPP + VISTA PREVIA -->
+      <section class="panel">
+        <h2>WhatsApp</h2>
+        <div id="wsp-estado" class="wsp-estado">Cargando…</div>
+        <div id="wsp-qr" class="wsp-qr" hidden>
+          <img id="wsp-qr-img" alt="Código QR de WhatsApp">
+          <p>Escanéalo con tu <b>número secundario</b>:<br>WhatsApp → Dispositivos vinculados → Vincular dispositivo</p>
+        </div>
+        <div id="wsp-grupo" class="wsp-grupo" hidden>
+          <label>
+            Grupo donde se mandan los mensajes
+            <select id="sel-grupo"></select>
+          </label>
+          <div class="fila-botones">
+            <button id="btn-guardar-grupo" class="btn btn-mini">Guardar grupo</button>
+            <button id="btn-resumen" class="btn btn-mini btn-fantasma">Enviar resumen de hoy</button>
+          </div>
+        </div>
+
+        <h3>Vista previa de los mensajes</h3>
+        <div id="vista-previa" class="vista-previa-lista"></div>
+      </section>
+    </div>
+
+    <!-- LISTA DE APUESTAS -->
+    <section class="panel">
+      <div class="panel-cabecera">
+        <h2>Apuestas</h2>
+        <label class="check">
+          <input type="checkbox" id="notificar" checked>
+          Mandar resultado al grupo al marcar
+        </label>
+      </div>
+      <div class="tabla-scroll">
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Apuesta</th>
+              <th>Cuota</th>
+              <th>Stake</th>
+              <th>Monto</th>
+              <th>Resultado</th>
+              <th>Ganancia</th>
+              <th>%</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lista-apuestas"></tbody>
+        </table>
+      </div>
+      <p id="vacio" class="vacio" hidden>Todavía no hay apuestas. Carga la primera arriba.</p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/vendor/tesseract/tesseract.min.js"></script>
+  <script src="/static/js/ticket.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
