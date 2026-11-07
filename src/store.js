@@ -16,17 +16,40 @@ function limpiar(valor, nombre) {
   return v.trim().replace(/^["']+|["']+$/g, '').trim();
 }
 
-const URL_REDIS =
-  limpiar(process.env.KV_REST_API_URL, 'KV_REST_API_URL') ||
-  limpiar(process.env.UPSTASH_REDIS_REST_URL, 'UPSTASH_REDIS_REST_URL');
-const TOKEN_REDIS =
-  limpiar(process.env.KV_REST_API_TOKEN, 'KV_REST_API_TOKEN') ||
-  limpiar(process.env.UPSTASH_REDIS_REST_TOKEN, 'UPSTASH_REDIS_REST_TOKEN');
+// Junta todo lo que se haya pegado en las 4 variables posibles y saca la URL y el token
+// aunque estén mezclados, cambiados de lugar o pegados juntos.
+const NOMBRES = ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
+const brutos = NOMBRES.map(n => process.env[n] || '').join('\n');
+
+function buscarUrl() {
+  const m = brutos.match(/https:\/\/[a-z0-9.-]+\.upstash\.io/i);
+  return m ? m[0] : null;
+}
+
+function buscarToken() {
+  const m = brutos.match(/(?:UPSTASH_REDIS_REST_TOKEN|KV_REST_API_TOKEN)\s*=\s*["']?([A-Za-z0-9_=-]{20,})/);
+  if (m) return m[1];
+  for (const n of ['KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_TOKEN', 'UPSTASH_REDIS_REST_URL', 'KV_REST_API_URL']) {
+    const v = limpiar(process.env[n], n);
+    if (v && !/https?:|\s/.test(v) && /^[A-Za-z0-9_=-]{20,}$/.test(v)) return v;
+  }
+  return null;
+}
+
+const URL_REDIS = buscarUrl();
+const TOKEN_REDIS = buscarToken();
 
 let redis = null;
+let errorConexion = null;
 if (URL_REDIS && TOKEN_REDIS) {
-  const { Redis } = require('@upstash/redis');
-  redis = new Redis({ url: URL_REDIS, token: TOKEN_REDIS });
+  try {
+    const { Redis } = require('@upstash/redis');
+    redis = new Redis({ url: URL_REDIS, token: TOKEN_REDIS });
+  } catch (e) {
+    errorConexion = e.message;
+  }
+} else if (brutos.trim()) {
+  errorConexion = 'Las claves de Upstash están incompletas (falta la URL o el token).';
 }
 
 const CLAVES = { datos: 'xap:datos', cola: 'xap:cola', bot: 'xap:bot' };
@@ -39,7 +62,7 @@ function modo() {
 }
 
 function sinDb() {
-  const e = new Error('Falta conectar la base de datos: en Vercel ve a Storage → Upstash Redis → Connect y luego Redeploy.');
+  const e = new Error(errorConexion || 'Falta conectar la base de datos: agrega UPSTASH_REDIS_REST_URL y UPSTASH_REDIS_REST_TOKEN en Vercel y vuelve a publicar.');
   e.status = 503;
   throw e;
 }
