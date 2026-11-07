@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JIJA$ · Diario</title>
+  <meta name="description" content="Resumen diario y mensual de las apuestas de JIJA$">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/diario.css">
+</head>
+<body>
+  <header class="cab">
+    <div class="marca">
+      <span class="marca-logo">JIJA$</span>
+      <span class="marca-sub">Diario de resultados</span>
+    </div>
+    <div class="vivo"><span class="punto"></span> En vivo</div>
+  </header>
+
+  <main class="contenedor">
+    <nav class="pestanas" role="tablist">
+      <button class="pestana activa" data-vista="hoy" role="tab">Hoy</button>
+      <button class="pestana" data-vista="mes" role="tab">Mes</button>
+      <select id="sel-mes" class="sel-mes" hidden aria-label="Elegir mes"></select>
+    </nav>
+
+    <!-- Número grande -->
+    <section class="principal">
+      <p id="titulo-periodo" class="periodo">—</p>
+      <p id="pct-grande" class="pct-grande">—</p>
+      <p id="frase" class="frase">Cargando…</p>
+    </section>
+
+    <!-- Tarjetas -->
+    <section class="tarjetas">
+      <article class="tarjeta">
+        <span class="t-label">Récord</span>
+        <strong id="t-record" class="t-valor">—</strong>
+      </article>
+      <article class="tarjeta">
+        <span class="t-label">Acierto</span>
+        <strong id="t-acierto" class="t-valor">—</strong>
+      </article>
+      <article class="tarjeta">
+        <span class="t-label">Yield</span>
+        <strong id="t-yield" class="t-valor">—</strong>
+      </article>
+      <article class="tarjeta">
+        <span class="t-label">Pendientes</span>
+        <strong id="t-pendientes" class="t-valor">—</strong>
+      </article>
+    </section>
+
+    <!-- Gráfico del mes -->
+    <section id="bloque-grafico" class="bloque" hidden>
+      <h2>Día a día</h2>
+      <div id="grafico" class="grafico"></div>
+    </section>
+
+    <!-- Lista de apuestas -->
+    <section class="bloque">
+      <h2 id="titulo-lista">Apuestas de hoy</h2>
+      <ul id="lista" class="lista"></ul>
+      <p id="vacio" class="vacio" hidden>Todavía no hay apuestas en este periodo.</p>
+    </section>
+
+    <footer class="pie">
+      <span>Acumulado total: <b id="pie-total">—</b></span>
+      <span id="pie-hora" class="tenue">—</span>
+    </footer>
+  </main>
+
+  <script src="/js/diario.js"></script>
+</body>
+</html>

@@ -45,6 +45,64 @@ api.post('/logout', (req, res) => {
 
 api.get('/sesion', (req, res) => res.json({ activa: Boolean(req.session && req.session.usuario) }));
 
+// ---------- Resumen público para la página /diario (sin login, solo porcentajes) ----------
+function resumenPeriodo(apuestas, capital) {
+  const r = resumen(apuestas, capital);
+  return {
+    porcentaje: r.porcentaje,
+    ganadas: r.ganadas,
+    perdidas: r.perdidas,
+    nulas: r.nulas,
+    pendientes: r.pendientes,
+    acierto: r.acierto,
+    yield: r.yield,
+    total: apuestas.length
+  };
+}
+
+api.get('/publico/resumen', r(async (req, res) => {
+  const d = await store.getDatos();
+  const zona = config.zonaHoraria;
+  const cap = d.capitalInicial;
+  const hoy = fechaLocal(new Date(), zona);
+  const mes = /^\d{4}-\d{2}$/.test(req.query.mes || '') ? req.query.mes : hoy.slice(0, 7);
+  const dia = a => fechaLocal(a.creadaEn, zona);
+
+  const delMes = d.apuestas.filter(a => dia(a).startsWith(mes));
+  const deHoy = d.apuestas.filter(a => dia(a) === hoy);
+
+  // % por día del mes
+  const porDia = {};
+  for (const a of delMes) (porDia[dia(a)] = porDia[dia(a)] || []).push(a);
+  const dias = Object.keys(porDia).sort().map(f => ({ fecha: f, ...resumenPeriodo(porDia[f], cap) }));
+
+  const lista = arr => arr.slice().sort((x, y) => x.id - y.id).map(a => {
+    const c = calcular(a, cap);
+    return {
+      id: a.id,
+      pick: a.pick,
+      mercado: a.mercado,
+      partido: a.partido,
+      cuota: a.cuota,
+      stake: a.stake,
+      estado: a.estado,
+      porcentaje: a.estado === 'pendiente' ? c.porcentajePotencial : c.porcentaje
+    };
+  });
+
+  const meses = [...new Set(d.apuestas.map(a => dia(a).slice(0, 7)))].sort().reverse();
+  if (!meses.includes(hoy.slice(0, 7))) meses.unshift(hoy.slice(0, 7));
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    hoy: { fecha: hoy, ...resumenPeriodo(deHoy, cap), apuestas: lista(deHoy) },
+    mes: { mes, ...resumenPeriodo(delMes, cap), dias, apuestas: lista(delMes) },
+    total: resumenPeriodo(d.apuestas, cap),
+    meses,
+    actualizado: new Date().toISOString()
+  });
+}));
+
 // ---------- Rutas para el bot de tu PC (usa la llave BOT_KEY, no la sesión) ----------
 const BOT_KEY = process.env.BOT_KEY || '';
 const botApi = express.Router();
