@@ -27,9 +27,10 @@ if errorlevel 1 (
 )
 
 :revisarenv
+if exist "bot\conexion.json" goto dependencias
 if exist ".env" goto dependencias
 echo.
-echo Falta el archivo .env con la direccion del dashboard y la llave del bot.
+echo Falta el archivo bot\conexion.json con la direccion del dashboard y la llave del bot.
 echo Pidele a Claude que lo cree y vuelve a abrir este archivo.
 pause
 exit /b

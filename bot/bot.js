@@ -10,15 +10,22 @@ const qrTerminal = require('qrcode-terminal');
 const cron = require('node-cron');
 const config = require('../config.json');
 
-const DASHBOARD = (process.env.DASHBOARD_URL || '').replace(/\/+$/, '');
-const BOT_KEY = process.env.BOT_KEY || '';
+// Configuración: bot/conexion.json (o variables DASHBOARD_URL / BOT_KEY en .env)
+let conexion = {};
+try {
+  conexion = require('./conexion.json');
+} catch {
+  /* sin archivo: se usan las variables de entorno */
+}
+const DASHBOARD = (process.env.DASHBOARD_URL || conexion.dashboardUrl || '').replace(/\/+$/, '');
+const BOT_KEY = process.env.BOT_KEY || conexion.botKey || '';
 
 const CADA_COLA_MS = 10000;   // revisa si hay mensajes nuevos cada 10 s
 const CADA_LATIDO_MS = 60000; // avisa al dashboard que sigue vivo cada 60 s
 const PAUSA_ENTRE_MSJ = 1500; // pausa entre mensajes para no parecer spam
 
 if (!DASHBOARD || !BOT_KEY) {
-  console.log('⚠️ Falta DASHBOARD_URL o BOT_KEY en el archivo .env');
+  console.log('⚠️ Falta bot/conexion.json (dashboardUrl y botKey).');
   process.exit(1);
 }
 
