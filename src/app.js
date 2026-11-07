@@ -45,6 +45,50 @@ api.post('/logout', (req, res) => {
 
 api.get('/sesion', (req, res) => res.json({ activa: Boolean(req.session && req.session.usuario) }));
 
+// ---------- Rutas para el bot de tu PC (usa la llave BOT_KEY, no la sesión) ----------
+const BOT_KEY = process.env.BOT_KEY || '';
+const botApi = express.Router();
+
+botApi.use((req, res, next) => {
+  if (BOT_KEY && req.get('x-bot-key') === BOT_KEY) return next();
+  res.status(401).json({ error: 'Llave del bot incorrecta' });
+});
+
+// El bot avisa que está vivo, su estado, el QR y sus grupos
+botApi.post('/estado', r(async (req, res) => {
+  const { estado, qr, numero, grupos } = req.body || {};
+  await store.setBot({ estado, qr: qr || null, numero: numero || null, grupos: grupos || [], actualizado: Date.now() });
+  res.json({ ok: true });
+}));
+
+// El bot pide el siguiente mensaje de la cola
+botApi.post('/siguiente', r(async (req, res) => {
+  const item = await store.sacarDeCola();
+  if (!item) return res.json({ item: null });
+  const d = await store.getDatos();
+  if (!d.grupoId) {
+    await store.devolverACola(item);
+    return res.json({ item: null, sinGrupo: true });
+  }
+  res.json({ item, grupoId: d.grupoId });
+}));
+
+// Si no pudo enviarlo, lo devuelve a la cola
+botApi.post('/devolver', r(async (req, res) => {
+  if (req.body && req.body.item) await store.devolverACola(req.body.item);
+  res.json({ ok: true });
+}));
+
+// Resumen nocturno (lo pide el bot a la hora configurada)
+botApi.post('/resumen', r(async (req, res) => {
+  const d = await store.getDatos();
+  const hoy = fechaLocal(new Date(), config.zonaHoraria);
+  await store.encolar(msj.resumenDia(d, hoy, config.zonaHoraria));
+  res.json({ ok: true });
+}));
+
+api.use('/bot', botApi);
+
 // Todo lo de abajo requiere sesión
 api.use((req, res, next) => {
   if (req.session && req.session.usuario) return next();

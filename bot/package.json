@@ -4,9 +4,13 @@
   "private": true,
   "description": "Bot de WhatsApp que manda los mensajes del dashboard al grupo",
   "dependencies": {
+    "dotenv": "^16.4.5",
     "node-cron": "^3.0.3",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.26.0"
+  },
+  "scripts": {
+    "start": "node bot.js"
   }
 }

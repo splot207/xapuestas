@@ -1,6 +1,6 @@
 // Bot de WhatsApp (corre en tu PC con el número secundario).
-// Lee la cola de mensajes que deja el dashboard y los manda al grupo.
-// Arranque: npm run bot   (desde la carpeta principal)
+// Le pide al dashboard (Vercel) los mensajes pendientes y los manda al grupo.
+// Arranque: doble clic en INICIAR-BOT.bat  (o: npm run bot)
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
@@ -8,15 +8,19 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const QRCode = require('qrcode');
 const qrTerminal = require('qrcode-terminal');
 const cron = require('node-cron');
-
 const config = require('../config.json');
-const store = require('../src/store');
-const msj = require('../src/mensajes');
-const { fechaLocal } = require('../src/calculos');
 
-const CADA_COLA_MS = 10000;     // revisa si hay mensajes nuevos cada 10 s
-const CADA_LATIDO_MS = 60000;   // avisa al dashboard que sigue vivo cada 60 s
-const PAUSA_ENTRE_MSJ = 1500;   // pausa entre mensajes para no parecer spam
+const DASHBOARD = (process.env.DASHBOARD_URL || '').replace(/\/+$/, '');
+const BOT_KEY = process.env.BOT_KEY || '';
+
+const CADA_COLA_MS = 10000;   // revisa si hay mensajes nuevos cada 10 s
+const CADA_LATIDO_MS = 60000; // avisa al dashboard que sigue vivo cada 60 s
+const PAUSA_ENTRE_MSJ = 1500; // pausa entre mensajes para no parecer spam
+
+if (!DASHBOARD || !BOT_KEY) {
+  console.log('⚠️ Falta DASHBOARD_URL o BOT_KEY en el archivo .env');
+  process.exit(1);
+}
 
 let estado = 'iniciando';
 let qrImagen = null;
@@ -25,6 +29,17 @@ let grupos = [];
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
+async function llamar(ruta, cuerpo) {
+  const res = await fetch(`${DASHBOARD}/api/bot/${ruta}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-bot-key': BOT_KEY },
+    body: JSON.stringify(cuerpo || {})
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `Error ${res.status}`);
+  return json;
+}
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: path.join(__dirname, '.sesion') }),
   puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
@@ -32,9 +47,9 @@ const client = new Client({
 
 async function publicarEstado() {
   try {
-    await store.setBot({ estado, qr: qrImagen, numero, grupos, actualizado: Date.now() });
+    await llamar('estado', { estado, qr: qrImagen, numero, grupos });
   } catch (e) {
-    console.error('No se pudo publicar el estado:', e.message);
+    console.error('No se pudo avisar al dashboard:', e.message);
   }
 }
 
@@ -65,11 +80,12 @@ client.on('ready', async () => {
   console.log(`✅ WhatsApp conectado (+${numero})`);
   await cargarGrupos();
   publicarEstado();
+  procesarCola();
 });
 
 client.on('auth_failure', () => {
   estado = 'desconectado';
-  console.log('⚠️ Falló la autenticación. Borra la carpeta bot/.sesion y vuelve a escanear.');
+  console.log('⚠️ Falló la autenticación. Borra la carpeta bot/.sesion y vuelve a abrir el bot.');
   publicarEstado();
 });
 
@@ -82,31 +98,31 @@ client.on('disconnected', () => {
 
 // Manda todo lo que haya en la cola
 let procesando = false;
+let avisoSinGrupo = false;
 async function procesarCola() {
   if (procesando || estado !== 'conectado') return;
   procesando = true;
   try {
-    // 1 sola consulta cuando no hay nada (para no gastar el plan gratis)
-    let item = await store.sacarDeCola();
-    if (!item) return;
-    const d = await store.getDatos();
-    if (!d.grupoId) {
-      await store.devolverACola(item);
-      return;
-    }
-    for (; item; item = await store.sacarDeCola()) {
+    for (;;) {
+      const r = await llamar('siguiente');
+      if (r.sinGrupo && !avisoSinGrupo) {
+        console.log('ℹ️ Hay mensajes esperando: elige el grupo en el dashboard (panel WhatsApp).');
+        avisoSinGrupo = true;
+      }
+      if (!r.item) break;
+      avisoSinGrupo = false;
       try {
-        await client.sendMessage(d.grupoId, item.texto);
-        console.log(`📤 Enviado: ${item.texto.split('\n')[0]}`);
+        await client.sendMessage(r.grupoId, r.item.texto);
+        console.log(`📤 Enviado: ${r.item.texto.split('\n')[0]}`);
         await esperar(PAUSA_ENTRE_MSJ);
       } catch (e) {
         console.error('No se pudo enviar, se reintenta luego:', e.message);
-        await store.devolverACola(item);
+        await llamar('devolver', { item: r.item }).catch(() => {});
         break;
       }
     }
   } catch (e) {
-    console.error('Error leyendo la cola:', e.message);
+    console.error('Error hablando con el dashboard:', e.message);
   } finally {
     procesando = false;
   }
@@ -116,9 +132,7 @@ async function procesarCola() {
 const [hh, mm] = config.horaResumen.split(':').map(Number);
 cron.schedule(`${mm} ${hh} * * *`, async () => {
   try {
-    const d = await store.getDatos();
-    const hoy = fechaLocal(new Date(), config.zonaHoraria);
-    await store.encolar(msj.resumenDia(d, hoy, config.zonaHoraria));
+    await llamar('resumen');
     console.log('🌙 Resumen nocturno en cola');
     procesarCola();
   } catch (e) {
@@ -126,15 +140,11 @@ cron.schedule(`${mm} ${hh} * * *`, async () => {
   }
 }, { timezone: config.zonaHoraria });
 
-if (store.modo() !== 'redis') {
-  console.log('⚠️ No encontré KV_REST_API_URL / KV_REST_API_TOKEN en el archivo .env.');
-  console.log('   El bot va a usar datos locales y NO va a ver lo que cargas en Vercel.');
-}
-
 setInterval(procesarCola, CADA_COLA_MS);
 setInterval(publicarEstado, CADA_LATIDO_MS);
 setInterval(() => estado === 'conectado' && cargarGrupos(), 5 * 60 * 1000);
 
+console.log(`🔗 Conectando con el dashboard: ${DASHBOARD}`);
 publicarEstado();
 client.initialize().catch(e => {
   estado = 'desconectado';
