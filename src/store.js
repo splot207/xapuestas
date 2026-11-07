@@ -23,7 +23,9 @@ const brutos = NOMBRES.map(n => process.env[n] || '').join('\n');
 
 function buscarUrl() {
   const m = brutos.match(/https:\/\/[a-z0-9.-]+\.upstash\.io/i);
-  return m ? m[0] : null;
+  if (m) return m[0];
+  // La URL no es secreta: si no está en las variables, se usa la de config.json
+  return brutos.trim() ? require('../config.json').upstashUrl || null : null;
 }
 
 function buscarToken() {
