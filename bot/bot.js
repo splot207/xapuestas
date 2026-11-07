@@ -35,6 +35,7 @@ let estado = 'iniciando';
 let qrImagen = null;
 let numero = null;
 let grupos = [];
+let avisoGrupos = false;
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
@@ -91,7 +92,10 @@ async function cargarGrupos() {
       .map(c => ({ id: c.id._serialized, nombre: c.name }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   } catch (e) {
-    console.error('No se pudieron leer los grupos:', e.message);
+    if (!avisoGrupos) {
+      console.log('ℹ️ WhatsApp no deja leer la lista de grupos. Escribe !aqui dentro de tu grupo para elegirlo.');
+      avisoGrupos = true;
+    }
   }
 }
 
@@ -115,18 +119,34 @@ client.on('ready', async () => {
   procesarCola();
 });
 
-// Escribe !aqui en tu grupo (desde cualquier número) y ese grupo queda elegido
+// Escribe !aqui en tu grupo (desde cualquier número) y ese grupo queda elegido.
+// No usa getChat()/getChats() porque fallan con algunas versiones de WhatsApp Web.
+const normalizar = t => (t || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/^[¡!]+/, '!');
+
 client.on('message_create', async m => {
   try {
-    if ((m.body || '').trim().toLowerCase() !== '!aqui') return;
-    const chat = await m.getChat();
-    if (!chat.isGroup) return;
-    const g = { id: chat.id._serialized, nombre: chat.name };
+    const grupoId = m.fromMe ? m.to : m.from;
+    const esGrupo = typeof grupoId === 'string' && grupoId.endsWith('@g.us');
+    if (esGrupo) console.log(`📩 Mensaje en un grupo: "${(m.body || '').slice(0, 40)}"`);
+    if (!esGrupo || normalizar(m.body) !== '!aqui') return;
+
+    let nombre = 'Grupo de apuestas';
+    try {
+      const chat = await m.getChat();
+      if (chat && chat.name) nombre = chat.name;
+    } catch {
+      /* si falla, se usa el nombre por defecto */
+    }
+    const g = { id: grupoId, nombre };
     await llamar('grupo', g);
     if (!grupos.some(x => x.id === g.id)) grupos.push(g);
     publicarEstado();
-    console.log(`✅ Grupo elegido: ${g.nombre}`);
-    await chat.sendMessage('✅ Listo, desde ahora las apuestas se mandan a este grupo.');
+    console.log(`✅ Grupo elegido: ${g.nombre} (${g.id})`);
+    try {
+      await client.sendMessage(g.id, '✅ Listo, desde ahora las apuestas se mandan a este grupo.');
+    } catch (e) {
+      console.error('No se pudo responder en el grupo:', e.message);
+    }
     procesarCola();
   } catch (e) {
     console.error('No se pudo guardar el grupo:', e.message);
@@ -158,7 +178,7 @@ async function procesarCola() {
     for (;;) {
       const r = await llamar('siguiente');
       if (r.sinGrupo && !avisoSinGrupo) {
-        console.log('ℹ️ Hay mensajes esperando: elige el grupo en el dashboard (panel WhatsApp).');
+        console.log('ℹ️ Hay mensajes esperando: escribe !aqui dentro de tu grupo de WhatsApp.');
         avisoSinGrupo = true;
       }
       if (!r.item) break;
