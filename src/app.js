@@ -63,14 +63,14 @@ botApi.post('/estado', r(async (req, res) => {
 
 // El bot pide el siguiente mensaje de la cola
 botApi.post('/siguiente', r(async (req, res) => {
-  const item = await store.sacarDeCola();
-  if (!item) return res.json({ item: null });
   const d = await store.getDatos();
+  if (d.linkPendiente) return res.json({ item: null, linkPendiente: d.linkPendiente });
   if (!d.grupoId) {
-    await store.devolverACola(item);
-    return res.json({ item: null, sinGrupo: true });
+    const hay = await store.largoCola();
+    return res.json({ item: null, sinGrupo: hay > 0 });
   }
-  res.json({ item, grupoId: d.grupoId });
+  const item = await store.sacarDeCola();
+  res.json({ item: item || null, grupoId: d.grupoId });
 }));
 
 // El bot avisa que alguien escribió !aqui en un grupo: ese es el grupo de los mensajes
@@ -80,6 +80,17 @@ botApi.post('/grupo', r(async (req, res) => {
   const d = await store.getDatos();
   d.grupoId = id;
   d.grupoNombre = nombre || 'Grupo';
+  d.linkPendiente = null;
+  d.linkError = null;
+  await store.setDatos(d);
+  res.json({ ok: true });
+}));
+
+// El bot no pudo usar el link de invitación
+botApi.post('/grupo-error', r(async (req, res) => {
+  const d = await store.getDatos();
+  d.linkPendiente = null;
+  d.linkError = String((req.body && req.body.error) || 'No se pudo usar el link').slice(0, 300);
   await store.setDatos(d);
   res.json({ ok: true });
 }));
@@ -270,6 +281,8 @@ api.get('/whatsapp', r(async (req, res) => {
     enCola: await store.largoCola(),
     grupoId: d.grupoId,
     grupoNombre: d.grupoNombre,
+    linkPendiente: Boolean(d.linkPendiente),
+    linkError: d.linkError || null,
     baseDatos: store.modo()
   });
 }));
@@ -280,6 +293,17 @@ api.put('/whatsapp/grupo', r(async (req, res) => {
   d.grupoNombre = req.body.nombre || null;
   await store.setDatos(d);
   res.json({ ok: true, grupoId: d.grupoId, grupoNombre: d.grupoNombre });
+}));
+
+// Pegas el link de invitación del grupo; el bot lo convierte en el grupo de destino
+api.put('/whatsapp/link', r(async (req, res) => {
+  const m = String((req.body && req.body.link) || '').match(/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})/);
+  if (!m) return res.status(400).json({ error: 'Ese no parece un link de grupo de WhatsApp (chat.whatsapp.com/...)' });
+  const d = await store.getDatos();
+  d.linkPendiente = m[1];
+  d.linkError = null;
+  await store.setDatos(d);
+  res.json({ ok: true });
 }));
 
 api.post('/whatsapp/resumen', r(async (req, res) => {

@@ -168,6 +168,49 @@ client.on('disconnected', motivo => {
   setTimeout(() => client.initialize().catch(() => {}), 5000);
 });
 
+// Convierte el link de invitación que pegaste en el dashboard en el grupo de destino
+let resolviendoLink = false;
+async function usarLink(codigo) {
+  if (resolviendoLink) return;
+  resolviendoLink = true;
+  console.log('🔗 Revisando el link del grupo…');
+  let id = null;
+  let nombre = 'Grupo de apuestas';
+  const errores = [];
+  try {
+    const info = await client.getInviteInfo(codigo);
+    id = (info && info.id && (info.id._serialized || info.id)) || null;
+    if (info && info.subject) nombre = info.subject;
+  } catch (e) {
+    errores.push(e.message);
+  }
+  if (!id) {
+    try {
+      const r = await client.acceptInvite(codigo);
+      id = (r && (r._serialized || r)) || null;
+    } catch (e) {
+      errores.push(e.message);
+    }
+  }
+  try {
+    if (id && String(id).endsWith('@g.us')) {
+      await llamar('grupo', { id: String(id), nombre });
+      console.log(`✅ Grupo elegido: ${nombre} (${id})`);
+      try {
+        await client.sendMessage(String(id), '✅ Listo, desde ahora las apuestas se mandan a este grupo.');
+      } catch (e) {
+        console.error('No se pudo responder en el grupo:', e.message);
+      }
+    } else {
+      const err = `WhatsApp no aceptó el link (${errores.join(' / ') || 'sin detalle'})`;
+      console.error('⚠️ ' + err);
+      await llamar('grupo-error', { error: err });
+    }
+  } finally {
+    resolviendoLink = false;
+  }
+}
+
 // Manda todo lo que haya en la cola
 let procesando = false;
 let avisoSinGrupo = false;
@@ -177,8 +220,12 @@ async function procesarCola() {
   try {
     for (;;) {
       const r = await llamar('siguiente');
+      if (r.linkPendiente) {
+        await usarLink(r.linkPendiente);
+        continue;
+      }
       if (r.sinGrupo && !avisoSinGrupo) {
-        console.log('ℹ️ Hay mensajes esperando: escribe !aqui dentro de tu grupo de WhatsApp.');
+        console.log('ℹ️ Hay mensajes esperando: pega el link de invitación del grupo en el dashboard (panel WhatsApp).');
         avisoSinGrupo = true;
       }
       if (!r.item) break;

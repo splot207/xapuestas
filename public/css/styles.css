@@ -342,3 +342,5 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color:
   .ticket-cuerpo { grid-template-columns: 1fr; }
   .ticket-img img { width: 100%; max-height: 160px; }
 }
+
+.ayuda-link { font-size: 12px; margin: 0; }

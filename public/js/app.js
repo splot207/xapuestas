@@ -449,6 +449,8 @@ async function revisarWhatsapp() {
     if (w.grupoNombre) info += ` · Grupo: ${w.grupoNombre}`;
     if (w.enCola) info += ` · ${w.enCola} mensaje${w.enCola === 1 ? '' : 's'} en espera`;
     if (w.error && w.estado !== 'conectado') info += ` · Error: ${w.error}`;
+    if (w.linkPendiente) info += ' · Revisando el link del grupo…';
+    if (w.linkError) info += ` · ${w.linkError}`;
     $('wsp-estado').textContent = info;
 
     $('wsp-qr').hidden = !(w.estado === 'qr' && w.qr);
@@ -480,6 +482,18 @@ $('btn-guardar-grupo').addEventListener('click', async () => {
     toast(err.message, 'error');
   }
 });
+
+$('btn-usar-link').addEventListener('click', async () => {
+  try {
+    await api('/api/whatsapp/link', { method: 'PUT', body: { link: $('input-link').value } });
+    $('input-link').value = '';
+    toast('Link guardado: el bot lo revisa en unos segundos');
+    revisarWhatsapp();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+$('btn-resumen-2').addEventListener('click', () => $('btn-resumen').click());
 
 $('btn-resumen').addEventListener('click', async () => {
   try {
