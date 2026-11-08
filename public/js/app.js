@@ -64,6 +64,17 @@ function renderResumen() {
   $('stat-en-juego').textContent = `En juego: ${plata(r.enJuego)}`;
 }
 
+// Marca las apuestas que no son de hoy (no se mandan solas a WhatsApp)
+function etiquetaDia(a) {
+  const f = d => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const hoy = f(new Date());
+  const dia = f(a.creadaEn);
+  if (dia === hoy) return '';
+  const ayer = f(Date.now() - 86400000);
+  const txt = dia === ayer ? 'ayer' : new Date(a.creadaEn).toLocaleDateString('es-PE', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' });
+  return ` <span class="dia-viejo" title="No se manda sola a WhatsApp">${txt}</span>`;
+}
+
 const ETIQUETAS = { pendiente: 'Pendiente', ganada: 'Ganada', perdida: 'Perdida', nula: 'Nula' };
 
 function renderApuestas() {
@@ -77,7 +88,7 @@ function renderApuestas() {
       <tr class="fila-${a.estado}">
         <td class="mono">${a.id}</td>
         <td>
-          <div class="ap-pick">${esc(a.pick)}</div>
+          <div class="ap-pick">${esc(a.pick)}${etiquetaDia(a)}</div>
           ${a.mercado ? `<div class="ap-sub">${esc(a.mercado)}</div>` : ''}
           ${a.partido ? `<div class="ap-sub">${esc(a.partido)}</div>` : ''}
         </td>

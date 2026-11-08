@@ -127,8 +127,15 @@ botApi.post('/siguiente', r(async (req, res) => {
     const hay = await store.largoCola();
     return res.json({ item: null, sinGrupo: hay > 0 });
   }
-  const item = await store.sacarDeCola();
-  res.json({ item: item || null, grupoId: d.grupoId });
+  // Los mensajes que quedaron esperando de días anteriores se descartan (no se mandan)
+  const hoy = hoyLocal();
+  let item = await store.sacarDeCola();
+  let descartados = 0;
+  while (item && (item.dia || fechaLocal(item.creado, config.zonaHoraria)) !== hoy) {
+    descartados++;
+    item = await store.sacarDeCola();
+  }
+  res.json({ item: item || null, grupoId: d.grupoId, descartados });
 }));
 
 // El bot avisa que alguien escribió !aqui en un grupo: ese es el grupo de los mensajes
@@ -199,15 +206,32 @@ async function botActivo() {
   return Boolean(b && Date.now() - b.actualizado < BOT_VIVO_MS && b.estado === 'conectado');
 }
 
+const hoyLocal = () => fechaLocal(new Date(), config.zonaHoraria);
+const diaDe = a => fechaLocal(a.creadaEn, config.zonaHoraria);
+
 // Pone mensajes en la cola; el bot en tu PC los manda a WhatsApp
 async function avisar(textos) {
   const lista = Array.isArray(textos) ? textos : [textos];
-  for (const t of lista) await store.encolar(t);
+  const hoy = hoyLocal();
+  for (const t of lista) await store.encolar(t, hoy);
   const d = await store.getDatos();
   let aviso = null;
   if (!d.grupoId) aviso = 'Falta elegir el grupo de WhatsApp';
   else if (!(await botActivo())) aviso = 'El bot está apagado: se mandará cuando lo prendas';
   return { encolados: lista.length, aviso };
+}
+
+// Solo se mandan a WhatsApp las apuestas de HOY. Las de días anteriores quedan en el registro.
+async function avisarApuestas(apuestas, d, forzar = false) {
+  const hoy = hoyLocal();
+  const deHoy = forzar ? apuestas : apuestas.filter(a => diaDe(a) === hoy);
+  const omitidas = apuestas.length - deHoy.length;
+  const r = deHoy.length ? await avisar(deHoy.map(a => msj.apuesta(a, d))) : { encolados: 0, aviso: null };
+  if (omitidas) {
+    const txt = `${omitidas === 1 ? 'Es de otro día' : `${omitidas} son de otros días`}: queda en el registro pero no se manda a WhatsApp`;
+    r.aviso = r.aviso ? `${r.aviso} · ${txt}` : txt;
+  }
+  return r;
 }
 
 function nuevaApuesta(d, x) {
@@ -262,7 +286,7 @@ api.post('/apuestas', r(async (req, res) => {
   const a = nuevaApuesta(d, req.body);
   d.apuestas.push(a);
   await store.setDatos(d);
-  const envio = req.body.enviar ? await avisar(msj.apuesta(a, d)) : {};
+  const envio = req.body.enviar ? await avisarApuestas([a], d) : {};
   res.json({ ...(await respuestaDatos(d)), ...envio });
 }));
 
@@ -277,7 +301,7 @@ api.post('/apuestas/lote', r(async (req, res) => {
   const nuevas = lista.map(x => nuevaApuesta(d, x));
   d.apuestas.push(...nuevas);
   await store.setDatos(d);
-  const envio = req.body.enviar ? await avisar(nuevas.map(a => msj.apuesta(a, d))) : {};
+  const envio = req.body.enviar ? await avisarApuestas(nuevas, d) : {};
   res.json({ ...(await respuestaDatos(d)), guardadas: nuevas.length, ...envio });
 }));
 
@@ -307,7 +331,7 @@ api.patch('/apuestas/:id', r(async (req, res) => {
     cambioEstado = estado !== 'pendiente';
   }
   await store.setDatos(d);
-  const envio = enviar && cambioEstado ? await avisar(msj.apuesta(a, d)) : {};
+  const envio = enviar && cambioEstado ? await avisarApuestas([a], d) : {};
   res.json({ ...(await respuestaDatos(d)), ...envio });
 }));
 
@@ -315,7 +339,7 @@ api.post('/apuestas/:id/enviar', r(async (req, res) => {
   const d = await store.getDatos();
   const a = d.apuestas.find(x => x.id === Number(req.params.id));
   if (!a) return res.status(404).json({ error: 'Apuesta no encontrada' });
-  res.json(await avisar(msj.apuesta(a, d)));
+  res.json(await avisarApuestas([a], d, true));
 }));
 
 api.delete('/apuestas/:id', r(async (req, res) => {

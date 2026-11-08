@@ -172,6 +172,7 @@ async function usarLink(panel, codigo) {
 async function procesarCola(panel) {
   for (;;) {
     const r = await llamar(panel, 'siguiente');
+    if (r.descartados) console.log(`🗑️ [${panel.nombre}] ${r.descartados} mensaje(s) de días anteriores no se mandaron.`);
     if (r.linkPendiente) {
       await usarLink(panel, r.linkPendiente);
       continue;

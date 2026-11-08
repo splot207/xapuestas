@@ -100,10 +100,10 @@ async function setDatos(d) {
 }
 
 // Cola de mensajes que el bot (en tu PC) va mandando a WhatsApp
-async function encolar(texto) {
+async function encolar(texto, dia) {
   const m = modo();
   if (m === 'sin-db') sinDb();
-  const item = { texto, creado: Date.now() };
+  const item = { texto, creado: Date.now(), dia: dia || null };
   if (m === 'redis') return redis.rpush(CLAVES.cola, item);
   const x = leerArchivo();
   x.cola.push(item);
